@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qual é o pinguim? · Naive Bayes</title>
+  <script>
+    // Aplica o tema salvo antes de desenhar a página (evita "piscar").
+    try { const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Caveat:wght@500;700&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,900;1,9..144,600;1,9..144,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="ceu" aria-hidden="true">
+    <div class="aurora"></div>
+    <div class="neve n1"></div>
+    <div class="neve n2"></div>
+  </div>
+
+  <button type="button" class="botao-tema" id="botao-tema" aria-label="Alternar tema claro/escuro">
+    <span class="icone-sol">☀</span><span class="icone-lua">☾</span>
+  </button>
+
+  <header class="topo">
+    <p class="selo"><span class="ponto"></span> IFCE · Probabilidade e Estatística · Trabalho N2</p>
+    <h1>Qual é o <span class="brilho">pinguim</span>?</h1>
+    <p class="subtitulo">
+      Três medidas, um teorema de 1763 e um classificador <strong>Naive Bayes</strong>.
+      Descubra se o pinguim é
+      <span class="tag" style="--cor:{{ especies['Adélia'].cor }}">Adélia</span>,
+      <span class="tag" style="--cor:{{ especies['Barbicha'].cor }}">Barbicha</span> ou
+      <span class="tag" style="--cor:{{ especies['Gentoo'].cor }}">Gentoo</span>.
+    </p>
+    <p class="nota-mao">arraste, deslize, sorteie — o modelo responde na hora ↓</p>
+    <svg class="icebergs" viewBox="0 0 1200 70" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 70 L0 52 L90 30 L150 46 L240 14 L320 40 L420 28 L470 44 L560 8 L640 38 L760 24 L820 42 L900 18 L980 40 L1060 26 L1130 44 L1200 32 L1200 70Z"/>
+    </svg>
+  </header>
+
+  <main class="grade">
+    <!-- ===================== Formulário ===================== -->
+    <section class="cartao formulario">
+      <div class="cartao-cabecalho">
+        <h2><span class="num">01</span> Medidas</h2>
+        <div class="exemplos" role="group" aria-label="Preencher com um exemplo">
+          {% for nome, valores_exemplo in exemplos.items() %}
+            <button type="button" class="chip" style="--cor:{{ especies[nome].cor }}"
+                    data-exemplo='{{ valores_exemplo | tojson }}'>{{ nome }}</button>
+          {% endfor %}
+          <button type="button" class="chip dado" id="sortear" title="Sorteia um pinguim a partir das distribuições de uma espécie">🎲 Sortear</button>
+        </div>
+      </div>
+
+      <div class="palco" id="palco">
+        <div class="balao" id="balao">Oi! Me mede?</div>
+        <svg id="pinguim" viewBox="-22 0 262 250" aria-hidden="true">
+          <ellipse cx="112" cy="238" rx="70" ry="8" class="sombra"/>
+          <g id="corpo-todo">
+            <path id="nadadeira-tras" class="nadadeira tras" d="M140 110 Q170 150 166 186 Q150 150 132 124Z"/>
+            <ellipse cx="98" cy="150" rx="56" ry="86" class="corpo"/>
+            <ellipse cx="112" cy="160" rx="38" ry="70" class="barriga"/>
+            <g id="cabeca">
+              <circle cx="118" cy="68" r="38" class="corpo"/>
+              <path class="traco bochecha" d="M100 72 Q118 98 148 78 Q140 60 126 62 Q108 62 100 72Z"/>
+              <path class="traco rosto-barbicha" d="M86 66 Q84 100 118 106 Q150 104 155 72 Q152 54 138 50 Q110 56 86 66Z"/>
+              <path class="traco tira-barbicha" d="M92 88 Q118 104 152 84"/>
+              <path class="traco mancha-gentoo" d="M112 44 Q126 34 142 42 Q132 50 112 44Z"/>
+              <circle class="traco anel-adelia" cx="132" cy="60" r="8.5"/>
+              <g id="olho">
+                <circle cx="132" cy="60" r="6.2" class="olho"/>
+                <circle id="pupila-brilho" cx="133.8" cy="58.2" r="2" fill="#fff"/>
+              </g>
+              <polygon id="bico" class="bico" points="150,62 190,70 150,78"/>
+            </g>
+            <path id="nadadeira" class="nadadeira" d=""/>
+            <path d="M82 230 q-14 6 -4 10 h34 q6 -6 -6 -10Z" class="pe"/>
+            <path d="M118 230 q-10 6 0 10 h32 q6 -6 -6 -10Z" class="pe"/>
+          </g>
+          <g class="cotas">
+            <line id="cota-bico" x1="150" y1="40" x2="190" y2="40"/>
+            <text id="txt-bico" x="170" y="34">bico</text>
+            <line id="cota-prof" x1="200" y1="62" x2="200" y2="78"/>
+            <text id="txt-prof" x="206" y="74">alt.</text>
+            <text id="txt-nad" x="-20" y="200">nadadeira</text>
+          </g>
+        </svg>
+      </div>
+
+      <form id="form-previsao" action="{{ url_for('rota_prever') }}" method="post" novalidate>
+        {% for c in campos %}
+          <div class="campo{% if erros.get(c.nome) %} com-erro{% endif %}" data-campo="{{ c.nome }}">
+            <div class="campo-topo">
+              <label for="{{ c.nome }}">{{ c.rotulo }}</label>
+              <span class="dica">{{ c.dica }}</span>
+            </div>
+            <div class="entrada">
+              <input type="range" class="deslizante" data-alvo="{{ c.nome }}" aria-label="{{ c.rotulo }}"
+                     min="{{ c.min }}" max="{{ c.max }}" step="{{ c.passo }}"
+                     value="{{ valores.get(c.nome) or ((c.min + c.max) / 2) | round(1) }}">
+              <div class="caixa-numero">
+                <input type="number" id="{{ c.nome }}" name="{{ c.nome }}" inputmode="decimal" required
+                       step="{{ c.passo }}" min="0"
+                       value="{{ valores.get(c.nome, '') }}" placeholder="{{ ((c.min + c.max) / 2) | round(1) }}">
+                <span class="unidade">{{ c.unidade }}</span>
+              </div>
+            </div>
+            <div class="faixa"><span>{{ c.min }}</span><span>faixa observada na base</span><span>{{ c.max }}</span></div>
+            <p class="erro" data-erro="{{ c.nome }}">{{ erros.get(c.nome, '') }}</p>
+          </div>
+        {% endfor %}
+
+        <div class="acoes">
+          <button type="submit" class="prever"><span class="txt">Prever</span><span class="onda"></span></button>
+          <label class="interruptor" title="Prevê automaticamente a cada mudança">
+            <input type="checkbox" id="ao-vivo" checked>
+            <span class="trilho-int"><span class="bolinha"></span></span>
+            <span class="rot">ao vivo</span>
+          </label>
+        </div>
+      </form>
+    </section>
+
+    <!-- ===================== Resultado ===================== -->
+    <section class="cartao resultado" id="resultado" aria-live="polite"
+             {% if resultado %}style="--cor:{{ resultado.cor }}"{% endif %}>
+      {% if resultado %}
+        <p class="rotulo-resultado">Espécie prevista</p>
+        <h2 class="especie">{{ resultado.especie }}</h2>
+        <p class="cientifico">{{ resultado.cientifico }}</p>
+        <p class="confianca"><strong>{{ '%.1f' | format(resultado.probabilidade * 100) }}%</strong> de probabilidade</p>
+        <ul class="barras">
+          {% for p in resultado.probabilidades %}
+            <li style="--cor:{{ p.cor }}; --valor:{{ p.valor }}">
+              <span class="nome">{{ p.classe }}</span>
+              <span class="trilho"><span class="preenchido"></span></span>
+              <span class="pct">{{ '%.1f' | format(p.valor * 100) }}%</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="descricao">{{ resultado.descricao }}</p>
+        {% if resultado.fora_da_faixa %}
+          <p class="aviso">Atenção: {{ resultado.fora_da_faixa | join(', ') }} fora da faixa observada na base. A previsão é menos confiável.</p>
+        {% endif %}
+      {% else %}
+        <div class="vazio">
+          <p class="rotulo-resultado"><span class="num">02</span> Resultado</p>
+          <h2>Aguardando medidas…</h2>
+          <p>Mexa nos controles, escolha um exemplo ou clique em <strong>Prever</strong>.</p>
+        </div>
+      {% endif %}
+    </section>
+
+    <!-- ===================== Histórico ===================== -->
+    <section class="cartao historico">
+      <div class="cartao-cabecalho">
+        <h2 class="h-peq"><span class="num">03</span> Últimas previsões</h2>
+        <button type="button" class="link" id="limpar-historico">limpar</button>
+      </div>
+      <ol id="lista-historico" class="lista-historico">
+        <li class="historico-vazio">Nenhuma previsão ainda.</li>
+      </ol>
+      <p class="placar" id="placar" hidden></p>
+    </section>
+
+    <!-- ===================== Por dentro do modelo ===================== -->
+    <section class="cartao dentro">
+      <div class="dentro-topo">
+        <div>
+          <h2><span class="num">04</span> Por dentro do Naive Bayes</h2>
+          <p class="texto-suave">
+            Cada curva é a normal <em>P(medida | espécie)</em> que o modelo aprendeu no treino.
+            <strong>Arraste a linha</strong> em qualquer gráfico para mudar a medida e veja qual espécie
+            fica mais provável.
+          </p>
+        </div>
+        <div class="formula-grande">
+          P(C | x) ∝ <span class="f-pri">P(C)</span> · <span class="f-ver">∏ P(x<sub>i</sub> | C)</span>
+          <span class="mao">priori × verossimilhanças</span>
+        </div>
+      </div>
+
+      <div class="graficos" id="graficos">
+        {% for c in campos %}
+          <figure class="grafico" data-grafico="{{ c.nome }}">
+            <figcaption>{{ c.rotulo }} <span class="valor-grafico" data-valor-grafico="{{ c.nome }}"></span></figcaption>
+            <svg viewBox="0 0 320 150" class="svg-grafico" role="img" aria-label="Curvas normais de {{ c.rotulo }} por espécie"></svg>
+            <p class="vencedor" data-vencedor="{{ c.nome }}"></p>
+          </figure>
+        {% endfor %}
+      </div>
+
+      <div class="rodape-dentro">
+        <div class="legenda">
+          {% for nome, e in especies.items() %}
+            <span style="--cor:{{ e.cor }}"><i></i>{{ nome }}</span>
+          {% endfor %}
+        </div>
+        <ul class="fatos">
+          <li><b>333</b> pinguins</li>
+          <li><b>3</b> medidas</li>
+          <li><b>75/25</b> treino/teste</li>
+          <li><b>97,6%</b> de acurácia</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="mao">feito com ♥ e estatística</span>
+    Dados: Palmer Penguins (Horst, Hill &amp; Gorman, 2020) · Modelo: scikit-learn GaussianNB · Back-end: Flask
+  </footer>
+
+  <script>
+    window.ESPECIES = {{ especies | tojson }};
+    window.PARAMETROS = {{ parametros | tojson }};
+    window.CAMPOS = {{ campos | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
